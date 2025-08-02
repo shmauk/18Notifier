@@ -74,22 +74,22 @@ func TestGraphQLRepository_Query(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		query    string
+		name      string
+		query     string
 		variables map[string]interface{}
-		wantErr  bool
+		wantErr   bool
 	}{
 		{
-			name:     "get game by ID",
-			query:    "query GetGame($id: String!) { getGame(id: $id) { id activePlayer finished } }",
+			name:      "get game by ID",
+			query:     "query GetGame($id: String!) { getGame(id: $id) { id activePlayer finished } }",
 			variables: map[string]interface{}{"id": "game1"},
-			wantErr:  false,
+			wantErr:   false,
 		},
 		{
-			name:     "query all games",
-			query:    "query QueryGame { queryGame { id activePlayer finished } }",
+			name:      "query all games",
+			query:     "query QueryGame { queryGame { id activePlayer finished } }",
 			variables: nil,
-			wantErr:  false,
+			wantErr:   false,
 		},
 	}
 
@@ -182,10 +182,10 @@ func TestGraphQLRepository_Mutate(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		mutation string
+		name      string
+		mutation  string
 		variables map[string]interface{}
-		wantErr  bool
+		wantErr   bool
 	}{
 		{
 			name:     "add game mutation",
@@ -247,8 +247,6 @@ func TestGraphQLRepository_Mutate(t *testing.T) {
 	}
 }
 
-
-
 func TestGraphQLRepository_NewGraphQLGameRepository(t *testing.T) {
 	graphqlAdapter := NewDGraphGraphQLAdapter("http://localhost:8080/graphql")
 	repo := NewGraphQLGameRepository(graphqlAdapter)
@@ -260,4 +258,4 @@ func TestGraphQLRepository_NewGraphQLGameRepository(t *testing.T) {
 	if repo.graphqlAdapter == nil {
 		t.Error("Expected GraphQL adapter to be initialized")
 	}
-} 
+}
