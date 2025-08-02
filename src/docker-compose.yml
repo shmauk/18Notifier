@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # DGraph Database
+  dgraph:
+    image: dgraph/standalone:latest
+    container_name: dgraph
+    ports:
+      - "8080:8080"  # GraphQL endpoint
+      - "8000:8000"  # HTTP endpoint
+      - "9080:9080"  # gRPC endpoint
+    volumes:
+      - dgraph_data:/dgraph
+    environment:
+      - DGRAPH_GRAPHQL_EXTENSIONS=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Schema Initialization Container
+  schema-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.schema-init
+    container_name: schema-init
+    depends_on:
+      dgraph:
+        condition: service_healthy
+    environment:
+      - DGRAPH_ENDPOINT=http://dgraph:8080
+
+  # Main 18xxNotifier Service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    container_name: 18xxnotifier
+    depends_on:
+      - dgraph
+      - schema-init
+    environment:
+      - DGRAPH_ENDPOINT=http://dgraph:8080
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_APP_ID=${DISCORD_APP_ID}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  dgraph_data: 

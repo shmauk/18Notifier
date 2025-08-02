@@ -1,0 +1,12 @@
+FROM alpine:latest
+
+# Install curl for health checks and jq for JSON parsing
+RUN apk add --no-cache curl jq
+
+# Create app directory
+WORKDIR /app
+
+# Copy the schema file
+COPY schema.sdl /app/schema.sdl
+
+CMD ["sh", "-c", "echo 'Waiting for DGraph...' && while ! curl -f http://dgraph:8080/health; do sleep 5; done && echo 'Initializing schema...' && curl -X POST http://dgraph:8080/admin/schema -H 'Content-Type: application/graphql' --data-binary @/app/schema.sdl && echo 'Schema initialization complete'"] 
