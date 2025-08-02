@@ -186,6 +186,158 @@ The service integrates with the 18xx.games API to fetch game data:
 }
 ```
 
+## 🤖 Discord Bot Interaction
+
+### Bot Setup
+1. **Create Discord Application**: Go to [Discord Developer Portal](https://discord.com/developers/applications)
+2. **Create Bot**: Add a bot to your application
+3. **Get Token**: Copy the bot token for the `DISCORD_TOKEN` environment variable
+4. **Get Application ID**: Copy the application ID for the `DISCORD_APP_ID` environment variable
+5. **Invite Bot**: Use the OAuth2 URL generator to invite the bot to your server
+
+### Available Commands
+
+#### User Registration and Account Linking
+```
+!register
+```
+- Registers your Discord account with the bot
+- Required before linking 18xx accounts
+
+```
+!link <18xx_username>
+```
+- Links your Discord account to an 18xx.games username
+- Example: `!link player123`
+- You can link multiple 18xx accounts to one Discord account
+
+```
+!unlink <18xx_username>
+```
+- Unlinks an 18xx account from your Discord account
+- Example: `!unlink player123`
+
+#### Game Subscription Management
+```
+!subscribe <game_id>
+```
+- Subscribes you to notifications for a specific game
+- Example: `!subscribe 218225`
+- You'll receive notifications when the game state changes
+
+```
+!unsubscribe <game_id>
+```
+- Unsubscribes you from notifications for a specific game
+- Example: `!unsubscribe 218225`
+
+```
+!subscriptions
+```
+- Lists all games you're currently subscribed to
+
+#### Game Tracking (Server Admin Only)
+```
+!track <game_id>
+```
+- Starts tracking a game in the current channel
+- Only server administrators can use this command
+- Example: `!track 218225`
+
+```
+!untrack <game_id>
+```
+- Stops tracking a game in the current channel
+- Only server administrators can use this command
+- Example: `!untrack 218225`
+
+```
+!tracked
+```
+- Lists all games currently being tracked in the channel
+
+#### Utility Commands
+```
+!help
+```
+- Shows available commands and their usage
+
+```
+!status
+```
+- Shows the bot's current status and connection health
+
+```
+!test
+```
+- Sends a test notification to verify the bot is working
+
+### Notification Types
+
+The bot sends notifications for the following game events:
+
+#### Player Changes
+- When a player joins or leaves a game
+- When the active player changes
+- Format: `@username Player changed from player1 to player2 in 18Chesapeake`
+
+#### Turn Start
+- When a new turn begins
+- Format: `@username It's your turn in 18Chesapeake!`
+
+#### Game End
+- When a game finishes
+- Format: `@username Game 18Chesapeake has ended!`
+
+### Channel Setup
+
+1. **Server Admin**: Use `!track <game_id>` in the channel where you want notifications
+2. **Users**: Use `!subscribe <game_id>` to receive notifications for tracked games
+3. **Bot Permissions**: Ensure the bot has permissions to:
+   - Read messages
+   - Send messages
+   - Mention users
+   - Use slash commands (if using Discord's new command system)
+
+### Best Practices
+
+#### For Server Administrators
+- Create dedicated channels for game notifications
+- Use `!track` only in channels where you want notifications
+- Monitor bot logs for any connection issues
+
+#### For Users
+- Register with `!register` before linking accounts
+- Link all your 18xx usernames with `!link`
+- Subscribe to games you're actively playing
+- Unsubscribe from finished games to reduce notification noise
+
+#### Privacy and Security
+- The bot only stores Discord user IDs and linked 18xx usernames
+- Game data is fetched from 18xx.games public API
+- No sensitive information is stored or transmitted
+- Users can unlink accounts and unsubscribe at any time
+
+### Troubleshooting
+
+#### Bot Not Responding
+1. Check if the bot is online in your server
+2. Verify the bot has proper permissions
+3. Check the application logs for connection errors
+4. Ensure environment variables are set correctly
+
+#### Not Receiving Notifications
+1. Verify you're subscribed to the game: `!subscriptions`
+2. Check if the game is being tracked: `!tracked`
+3. Ensure your 18xx username is linked: `!link <username>`
+4. Verify the bot can mention you in the channel
+
+#### Command Not Working
+1. Check command syntax and spelling
+2. Ensure you have proper permissions (admin for tracking commands)
+3. Try the `!help` command to see available options
+4. Check if the bot is responding to other commands
+
 ## 🔧 Development
 
 ### Project Structure
