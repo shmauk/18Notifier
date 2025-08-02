@@ -43,3 +43,20 @@ type GameData {
     finished: Boolean!
     channel: GameChannelMap!
 }
+
+enum NotificationType {
+    GameEnd
+    PlayerTurn
+}
+
+"""
+Notifications
+"""
+type Notification {
+    type: NotificationType!
+    address: String!
+    game: Game!
+    users: [User!]!
+    sent: Boolean!
+    attempts: Int!
+}

@@ -1,0 +1,42 @@
+{
+  "id": 218225,
+  "description": "",
+  "user": {
+    "id": 1234,
+    "name": "username1"
+  },
+  "players": [
+    {
+      "id": 1234,
+      "name": "username1"
+    },
+    {
+      "id": 5678,
+      "name": "username2"
+    }
+  ],
+  "min_players": 2,
+  "max_players": 6,
+  "title": "18Chesapeake",
+  "settings": {
+    "seed": 1555860870,
+    "is_async": true,
+    "unlisted": true,
+    "auto_routing": false,
+    "player_order": null,
+    "optional_rules": []
+  },
+  "user_settings": null,
+  "status": "active",
+  "turn": 1,
+  "round": "Auction Round",
+  "acting": [5678],
+  "result": {
+
+  },
+  "actions": [],
+  "loaded": true,
+  "created_at": 1753741917,
+  "updated_at": 1753746500,
+  "finished_at": null
+}

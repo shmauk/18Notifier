@@ -1,10 +1,10 @@
 # Project Status
 
-## Completed Features
+## Completed Tasks
 
-## In Progress
+## In Progress Tasks
 
-## Pending
+## Pending Tasks
 - ADP-001
 - ADP-002
 - ADP-003
