@@ -1,0 +1,20 @@
+graph TD
+    subgraph "18xxNotifier Microservice"
+        subgraph "Core Domain"
+            A[Game Service] --> B[Notification Service]
+            B --> C[User Service]
+        end
+        
+        subgraph "Internal Adapters"
+            D[Scraper Adapter] --> A
+            E[GraphQL Adapter] --> C
+            F[Discord Adapter] --> B
+            E --> A
+        end
+        
+        subgraph "External Systems"
+            G[18xx.games API] --> D
+            I[Discord API] --> F
+            H[(DGraph Database)] --> E
+        end
+    end
