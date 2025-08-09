@@ -1,0 +1,67 @@
+"""
+A discord server
+"""
+type Guild {
+    id: String! @id @search(by: [exact])
+    channel: [Channel!]! @hasInverse(field: guild)
+}
+
+"""
+A specific channel in a discord server
+"""
+type Channel {
+    id: String! @id @search(by: [exact])
+    guild: Guild
+    games: [GameChannelMap]
+}
+
+"""
+A mapping between a discord account and one or more 18xx accounts along with any linked games
+"""
+type User {
+    discId: String! @id @search(by: [exact])
+    eighteenxxUser: [String!]
+    games: [GameChannelMap]
+    subscribedGames: [GameData!]
+}
+
+"""
+A mapping from a channel to a game of 18xx along with any users subscribed to notifications in that channel
+"""
+type GameChannelMap {
+    game: GameData! @hasInverse(field: channel)
+    channel: Channel! @hasInverse(field: games)
+    users: [User!]! @hasInverse(field: games)
+}
+
+"""
+A game of 18xx
+"""
+type GameData {
+    id: String! @id @search(by: [exact])
+    players: [String]
+    activePlayers: [String]
+    finished: Boolean!
+    channel: GameChannelMap!
+}
+
+enum NotificationType {
+    GameEnd
+    PlayerTurn
+}
+
+"""
+Notifications
+"""
+type Notification {
+    id: String! @id @search(by: [exact])
+    type: NotificationType!
+    message: String!
+    gameId: String!
+    channelId: String!
+    guildId: String!
+    users: [String!]
+    sent: Boolean!
+    attempts: Int!
+    createdAt: String!
+}
