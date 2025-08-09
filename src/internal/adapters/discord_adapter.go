@@ -21,6 +21,8 @@ type DiscordAdapter struct {
 	httpClient  *http.Client
 	commandChan chan DiscordCommand
 	stopChan    chan struct{}
+	ready       bool // Track if we've received the READY event
+	sequence    *int // Track the sequence number from the last message
 }
 
 // DiscordMessage represents a Discord message structure
@@ -37,47 +39,27 @@ type DiscordMessage struct {
 
 // DiscordGatewayPayload represents Discord Gateway payload
 type DiscordGatewayPayload struct {
-	Op   int             `json:"op"`
-	Data json.RawMessage `json:"d,omitempty"`
-	Type string          `json:"t,omitempty"`
+	Op       int             `json:"op"`
+	Data     json.RawMessage `json:"d,omitempty"`
+	Type     string          `json:"t,omitempty"`
+	Sequence *int            `json:"s,omitempty"`
 }
 
 // DiscordIdentifyPayload represents the identify payload for Discord Gateway
 type DiscordIdentifyPayload struct {
-	Token      string `json:"token"`
-	Properties struct {
-		OS      string `json:"os"`
-		Browser string `json:"browser"`
-		Device  string `json:"device"`
-	} `json:"properties"`
-	Presence struct {
-		Status string `json:"status"`
-		Since  int    `json:"since"`
-		Game   struct {
-			Name string `json:"name"`
-			Type int    `json:"type"`
-		} `json:"game"`
-	} `json:"presence"`
+	Token   string `json:"token"`
+	Intents int    `json:"intents"`
 }
 
 // NewDiscordAdapter creates a new Discord adapter
 func NewDiscordAdapter() *DiscordAdapter {
-	token := os.Getenv("DISCORD_TOKEN")
-	if token == "" {
-		log.Println("Warning: DISCORD_TOKEN not set")
-	}
-
-	appID := os.Getenv("DISCORD_APP_ID")
-	if appID == "" {
-		log.Println("Warning: DISCORD_APP_ID not set")
-	}
-
 	return &DiscordAdapter{
-		token:       token,
-		appID:       appID,
-		httpClient:  &http.Client{Timeout: 30 * time.Second},
+		token:       os.Getenv("DISCORD_TOKEN"),
+		appID:       os.Getenv("DISCORD_APP_ID"),
+		httpClient:  &http.Client{Timeout: 10 * time.Second},
 		commandChan: make(chan DiscordCommand, 100),
 		stopChan:    make(chan struct{}),
+		ready:       false,
 	}
 }
 
@@ -172,14 +154,14 @@ func (a *DiscordAdapter) getGatewayURL() (string, error) {
 	}
 	defer resp.Body.Close()
 
-	var result struct {
+	var gateway struct {
 		URL string `json:"url"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&gateway); err != nil {
 		return "", fmt.Errorf("failed to decode gateway response: %w", err)
 	}
 
-	return result.URL + "?v=10&encoding=json", nil
+	return gateway.URL + "?v=10&encoding=json", nil
 }
 
 // handleWebSocket handles the WebSocket connection to Discord Gateway
@@ -192,14 +174,30 @@ func (a *DiscordAdapter) handleWebSocket() {
 		return
 	}
 
+	log.Printf("Successfully identified with Discord Gateway")
+
 	for {
 		select {
 		case <-a.stopChan:
+			log.Printf("Stopping WebSocket connection")
 			return
 		default:
 			_, message, err := a.wsConn.ReadMessage()
 			if err != nil {
 				log.Printf("WebSocket read error: %v", err)
+
+				// Try to reconnect if it's a connection error
+				if strings.Contains(err.Error(), "close") {
+					log.Printf("Connection closed, attempting to reconnect...")
+					time.Sleep(5 * time.Second)
+
+					// Try to reconnect
+					if err := a.reconnect(); err != nil {
+						log.Printf("Failed to reconnect: %v", err)
+						return
+					}
+					continue
+				}
 				return
 			}
 
@@ -210,22 +208,58 @@ func (a *DiscordAdapter) handleWebSocket() {
 	}
 }
 
+// reconnect attempts to reconnect to the Discord Gateway
+func (a *DiscordAdapter) reconnect() error {
+	log.Printf("Attempting to reconnect to Discord Gateway...")
+
+	// Close existing connection
+	if a.wsConn != nil {
+		a.wsConn.Close()
+	}
+
+	// Reset ready flag
+	a.ready = false
+
+	// Get new gateway URL
+	gatewayURL, err := a.getGatewayURL()
+	if err != nil {
+		return fmt.Errorf("failed to get gateway URL: %w", err)
+	}
+
+	// Connect to WebSocket
+	wsConn, _, err := websocket.DefaultDialer.Dial(gatewayURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to connect to WebSocket: %w", err)
+	}
+
+	a.wsConn = wsConn
+
+	// Send identify payload
+	if err := a.sendIdentify(); err != nil {
+		return fmt.Errorf("failed to identify after reconnect: %w", err)
+	}
+
+	log.Printf("Successfully reconnected to Discord Gateway")
+	return nil
+}
+
 // sendIdentify sends the identify payload to Discord
 func (a *DiscordAdapter) sendIdentify() error {
 	identify := DiscordGatewayPayload{
 		Op: 2, // Identify
 		Data: func() json.RawMessage {
-			payload := DiscordIdentifyPayload{
-				Token: a.token,
+			payload := map[string]interface{}{
+				"token":   a.token,
+				"intents": 33281, // GUILDS + GUILD_MESSAGES + MESSAGE_CONTENT
+				"properties": map[string]string{
+					"os":      "linux",
+					"browser": "18xxNotifier",
+					"device":  "18xxNotifier",
+				},
 			}
-			payload.Properties.OS = "linux"
-			payload.Properties.Browser = "18xxNotifier"
-			payload.Properties.Device = "18xxNotifier"
-			payload.Presence.Status = "online"
-			payload.Presence.Game.Name = "18xx games"
-			payload.Presence.Game.Type = 0
 
 			data, _ := json.Marshal(payload)
+			log.Printf("Identify payload JSON: %s", string(data))
 			return data
 		}(),
 	}
@@ -240,9 +274,17 @@ func (a *DiscordAdapter) handleMessage(message []byte) error {
 		return fmt.Errorf("failed to unmarshal payload: %w", err)
 	}
 
+	// Store sequence number if present
+	if payload.Sequence != nil {
+		a.sequence = payload.Sequence
+		log.Printf("Updated sequence number: %d", *a.sequence)
+	}
+
 	switch payload.Op {
 	case 10: // Hello - start heartbeat
 		go a.startHeartbeat(payload.Data)
+	case 11: // Heartbeat acknowledgment
+		log.Printf("Received heartbeat acknowledgment")
 	case 0: // Dispatch - handle events
 		return a.handleDispatch(payload.Type, payload.Data)
 	}
@@ -260,18 +302,38 @@ func (a *DiscordAdapter) startHeartbeat(data json.RawMessage) {
 		return
 	}
 
+	log.Printf("Starting heartbeat with interval: %dms", hello.HeartbeatInterval)
 	ticker := time.NewTicker(time.Duration(hello.HeartbeatInterval) * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			heartbeat := DiscordGatewayPayload{Op: 1} // Heartbeat
+			log.Printf("Sending heartbeat...")
+
+			// Create heartbeat payload with sequence number
+			var heartbeatData json.RawMessage
+			if a.sequence != nil {
+				// Include the sequence number
+				data, _ := json.Marshal(*a.sequence)
+				heartbeatData = data
+			} else {
+				// Send null if no sequence number
+				heartbeatData = json.RawMessage("null")
+			}
+
+			heartbeat := DiscordGatewayPayload{
+				Op:   1, // Heartbeat
+				Data: heartbeatData,
+			}
+
 			if err := a.wsConn.WriteJSON(heartbeat); err != nil {
 				log.Printf("Failed to send heartbeat: %v", err)
 				return
 			}
+			log.Printf("Heartbeat sent successfully")
 		case <-a.stopChan:
+			log.Printf("Stopping heartbeat loop")
 			return
 		}
 	}
@@ -280,6 +342,9 @@ func (a *DiscordAdapter) startHeartbeat(data json.RawMessage) {
 // handleDispatch handles Discord Gateway dispatch events
 func (a *DiscordAdapter) handleDispatch(eventType string, data json.RawMessage) error {
 	switch eventType {
+	case "READY":
+		a.ready = true
+		log.Printf("Received READY event from Discord Gateway")
 	case "MESSAGE_CREATE":
 		return a.handleMessageCreate(data)
 	}
@@ -288,20 +353,55 @@ func (a *DiscordAdapter) handleDispatch(eventType string, data json.RawMessage) 
 
 // handleMessageCreate processes message creation events
 func (a *DiscordAdapter) handleMessageCreate(data json.RawMessage) error {
+	// Debug: Log the raw data first
+	log.Printf("Raw message data: %s", string(data))
+
 	var message DiscordMessage
 	if err := json.Unmarshal(data, &message); err != nil {
 		return fmt.Errorf("failed to unmarshal message: %w", err)
 	}
 
+	// Debug logging
+	log.Printf("Received message: '%s' from user %s in channel %s", message.Content, message.Author.ID, message.ChannelID)
+
 	// Ignore messages from bots
 	if message.Author.ID == a.appID {
+		log.Printf("Ignoring message from self (bot)")
 		return nil
 	}
 
-	// Check if message is a command
+	// Only process messages if the bot is ready
+	if !a.ready {
+		log.Printf("Bot not ready, ignoring message: '%s'", message.Content)
+		return nil
+	}
+
+	// Check if message content is empty
+	if message.Content == "" {
+		log.Printf("Message content is empty, trying to extract from raw data...")
+
+		// Try to extract content directly from raw data as a fallback
+		var rawData map[string]interface{}
+		if err := json.Unmarshal(data, &rawData); err == nil {
+			if content, exists := rawData["content"].(string); exists && content != "" {
+				log.Printf("Found content in raw data: '%s'", content)
+				message.Content = content
+			} else {
+				log.Printf("No content found in raw data either")
+				return nil
+			}
+		} else {
+			log.Printf("Failed to parse raw data as map: %v", err)
+			return nil
+		}
+	}
+
+	// Check if message is a command (starts with !18xx)
 	if strings.HasPrefix(message.Content, "!18xx") {
+		log.Printf("Processing command: %s", message.Content)
 		parts := strings.Fields(message.Content)
 		if len(parts) < 2 {
+			log.Printf("Command has insufficient parts: %d", len(parts))
 			return nil
 		}
 
@@ -321,6 +421,8 @@ func (a *DiscordAdapter) handleMessageCreate(data json.RawMessage) error {
 		default:
 			log.Printf("Command channel full, dropping command: %s", command.Command)
 		}
+	} else {
+		log.Printf("Message is not a command (doesn't start with !18xx): '%s'", message.Content)
 	}
 
 	return nil

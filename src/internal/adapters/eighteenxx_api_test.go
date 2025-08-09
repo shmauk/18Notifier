@@ -29,19 +29,27 @@ func TestEighteenxxAPIAdapter_FetchGameData(t *testing.T) {
 		switch gameID {
 		case "test-game-123":
 			response = map[string]interface{}{
-				"id":           "test-game-123",
-				"players":      []string{"player1", "player2", "player3"},
-				"activePlayer": "player1",
-				"finished":     false,
-				"lastUpdated":  time.Now().Format(time.RFC3339),
+				"id": 123,
+				"players": []map[string]interface{}{
+					{"id": 1, "name": "player1"},
+					{"id": 2, "name": "player2"},
+					{"id": 3, "name": "player3"},
+				},
+				"acting":     []int{1, 2}, // Multiple players acting
+				"status":     "active",
+				"updated_at": time.Now().Unix(),
 			}
 		case "finished-game":
 			response = map[string]interface{}{
-				"id":           "finished-game",
-				"players":      []string{"player1", "player2"},
-				"activePlayer": "",
-				"finished":     true,
-				"lastUpdated":  time.Now().Format(time.RFC3339),
+				"id": 456,
+				"players": []map[string]interface{}{
+					{"id": 1, "name": "player1"},
+					{"id": 2, "name": "player2"},
+				},
+				"acting":      []int{},
+				"status":      "finished",
+				"updated_at":  time.Now().Unix(),
+				"finished_at": time.Now().Unix(),
 			}
 		case "not-found":
 			w.WriteHeader(http.StatusNotFound)
@@ -113,8 +121,18 @@ func TestEighteenxxAPIAdapter_FetchGameData(t *testing.T) {
 
 			// Verify game data for successful cases
 			if game != nil {
-				if game.ID != tt.gameID {
-					t.Errorf("Expected game ID %s, got %s", tt.gameID, game.ID)
+				expectedID := ""
+				switch tt.gameID {
+				case "test-game-123":
+					expectedID = "123"
+				case "finished-game":
+					expectedID = "456"
+				default:
+					expectedID = tt.gameID
+				}
+
+				if game.ID != expectedID {
+					t.Errorf("Expected game ID %s, got %s", expectedID, game.ID)
 				}
 				if tt.gameID == "finished-game" && !game.Finished {
 					t.Errorf("Expected finished game to be marked as finished")

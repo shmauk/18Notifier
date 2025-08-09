@@ -4,16 +4,16 @@ import "time"
 
 // Game represents a game of 18xx
 type Game struct {
-	ID           string    `json:"id"`
-	Players      []string  `json:"players"`
-	ActivePlayer string    `json:"activePlayer"`
-	Finished     bool      `json:"finished"`
-	LastUpdated  time.Time `json:"lastUpdated"`
+	ID            string    `json:"id"`
+	Players       []string  `json:"players"`
+	ActivePlayers []string  `json:"activePlayers"`
+	Finished      bool      `json:"finished"`
+	LastUpdated   time.Time `json:"lastUpdated"`
 }
 
 // IsActive returns true if the game is currently active
 func (g *Game) IsActive() bool {
-	return !g.Finished && g.ActivePlayer != ""
+	return !g.Finished && len(g.ActivePlayers) > 0
 }
 
 // IsFinished returns true if the game is finished
@@ -21,9 +21,17 @@ func (g *Game) IsFinished() bool {
 	return g.Finished
 }
 
-// GetActivePlayer returns the currently active player
+// GetActivePlayers returns the currently active players
+func (g *Game) GetActivePlayers() []string {
+	return g.ActivePlayers
+}
+
+// GetActivePlayer returns the first active player (for backward compatibility)
 func (g *Game) GetActivePlayer() string {
-	return g.ActivePlayer
+	if len(g.ActivePlayers) > 0 {
+		return g.ActivePlayers[0]
+	}
+	return ""
 }
 
 // GetPlayers returns all players in the game
@@ -48,7 +56,7 @@ type GameChange struct {
 // GameRepository defines the interface for game data operations
 type GameRepository interface {
 	GetGame(id string) (*Game, error)
-	SaveGame(game *Game) error
+	SaveGame(game *Game, channelID string, guildID string) error
 	UpdateGame(game *Game) error
 	DeleteGame(id string) error
 	GetAllGames() ([]*Game, error)

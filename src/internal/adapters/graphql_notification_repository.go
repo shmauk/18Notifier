@@ -171,7 +171,7 @@ func (r *GraphQLNotificationRepository) UpdateNotification(notification *entitie
 func (r *GraphQLNotificationRepository) GetPendingNotifications() ([]*entities.Notification, error) {
 	query := `
 		query GetPendingNotifications {
-			queryNotification(filter: { sent: { eq: false } }) {
+			queryNotification {
 				id
 				type
 				message
@@ -180,6 +180,7 @@ func (r *GraphQLNotificationRepository) GetPendingNotifications() ([]*entities.N
 				guildId
 				users
 				sent
+				attempts
 				createdAt
 			}
 		}
@@ -213,6 +214,11 @@ func (r *GraphQLNotificationRepository) GetPendingNotifications() ([]*entities.N
 
 	var notifications []*entities.Notification
 	for _, notifData := range response.Data.QueryNotification {
+		// Filter for unsent notifications in application code
+		if notifData.Sent {
+			continue
+		}
+
 		notificationType := entities.ParseNotificationType(notifData.Type)
 		notification := &entities.Notification{
 			ID:        notifData.ID,
@@ -274,8 +280,8 @@ func (r *GraphQLNotificationRepository) MarkNotificationSent(notificationID stri
 // GetNotificationsByGame gets all notifications for a specific game
 func (r *GraphQLNotificationRepository) GetNotificationsByGame(gameID string) ([]*entities.Notification, error) {
 	query := `
-		query GetNotificationsByGame($gameID: String!) {
-			queryNotification(filter: { gameId: { eq: $gameID } }) {
+		query GetNotificationsByGame {
+			queryNotification {
 				id
 				type
 				message
@@ -290,11 +296,7 @@ func (r *GraphQLNotificationRepository) GetNotificationsByGame(gameID string) ([
 		}
 	`
 
-	variables := map[string]interface{}{
-		"gameID": gameID,
-	}
-
-	result, err := r.graphqlAdapter.Query(query, variables)
+	result, err := r.graphqlAdapter.Query(query, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query notifications by game: %w", err)
 	}
@@ -322,6 +324,11 @@ func (r *GraphQLNotificationRepository) GetNotificationsByGame(gameID string) ([
 
 	var notifications []*entities.Notification
 	for _, notifData := range response.Data.QueryNotification {
+		// Filter for notifications by game ID in application code
+		if notifData.GameID != gameID {
+			continue
+		}
+
 		notificationType := entities.ParseNotificationType(notifData.Type)
 		notification := &entities.Notification{
 			ID:        notifData.ID,

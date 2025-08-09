@@ -26,7 +26,9 @@ func (r *GraphQLUserRepository) GetUser(discordID string) (*entities.User, error
 			queryUser(filter: { discId: { eq: $discordID } }) {
 				discId
 				eighteenxxUser
-				subscribedGames
+				subscribedGames {
+					id
+				}
 			}
 		}
 	`
@@ -45,7 +47,9 @@ func (r *GraphQLUserRepository) GetUser(discordID string) (*entities.User, error
 			QueryUser []struct {
 				DiscordID          string   `json:"discId"`
 				EighteenxxAccounts []string `json:"eighteenxxUser"`
-				SubscribedGames    []string `json:"subscribedGames"`
+				SubscribedGames    []struct {
+					ID string `json:"id"`
+				} `json:"subscribedGames"`
 			} `json:"queryUser"`
 		} `json:"data"`
 	}
@@ -59,10 +63,16 @@ func (r *GraphQLUserRepository) GetUser(discordID string) (*entities.User, error
 	}
 
 	userData := response.Data.QueryUser[0]
+	// Extract just the IDs from the subscribed games
+	var subscribedGameIDs []string
+	for _, game := range userData.SubscribedGames {
+		subscribedGameIDs = append(subscribedGameIDs, game.ID)
+	}
+
 	user := &entities.User{
 		DiscordID:          userData.DiscordID,
 		EighteenxxAccounts: userData.EighteenxxAccounts,
-		SubscribedGames:    userData.SubscribedGames,
+		SubscribedGames:    subscribedGameIDs,
 	}
 
 	return user, nil
@@ -81,9 +91,17 @@ func (r *GraphQLUserRepository) SaveUser(user *entities.User) error {
 	`
 
 	input := map[string]interface{}{
-		"discId":          user.DiscordID,
-		"eighteenxxUser":  user.EighteenxxAccounts,
-		"subscribedGames": user.SubscribedGames,
+		"discId":         user.DiscordID,
+		"eighteenxxUser": user.EighteenxxAccounts,
+		"subscribedGames": func() []map[string]interface{} {
+			var gameRefs []map[string]interface{}
+			for _, gameID := range user.SubscribedGames {
+				gameRefs = append(gameRefs, map[string]interface{}{
+					"id": gameID,
+				})
+			}
+			return gameRefs
+		}(),
 	}
 
 	variables := map[string]interface{}{
@@ -117,8 +135,16 @@ func (r *GraphQLUserRepository) UpdateUser(user *entities.User) error {
 			},
 		},
 		"set": map[string]interface{}{
-			"eighteenxxUser":  user.EighteenxxAccounts,
-			"subscribedGames": user.SubscribedGames,
+			"eighteenxxUser": user.EighteenxxAccounts,
+			"subscribedGames": func() []map[string]interface{} {
+				var gameRefs []map[string]interface{}
+				for _, gameID := range user.SubscribedGames {
+					gameRefs = append(gameRefs, map[string]interface{}{
+						"id": gameID,
+					})
+				}
+				return gameRefs
+			}(),
 		},
 	}
 
@@ -169,7 +195,9 @@ func (r *GraphQLUserRepository) GetAllUsers() ([]*entities.User, error) {
 			queryUser {
 				discId
 				eighteenxxUser
-				subscribedGames
+				subscribedGames {
+					id
+				}
 			}
 		}
 	`
@@ -184,7 +212,9 @@ func (r *GraphQLUserRepository) GetAllUsers() ([]*entities.User, error) {
 			QueryUser []struct {
 				DiscordID          string   `json:"discId"`
 				EighteenxxAccounts []string `json:"eighteenxxUser"`
-				SubscribedGames    []string `json:"subscribedGames"`
+				SubscribedGames    []struct {
+					ID string `json:"id"`
+				} `json:"subscribedGames"`
 			} `json:"queryUser"`
 		} `json:"data"`
 	}
@@ -195,10 +225,16 @@ func (r *GraphQLUserRepository) GetAllUsers() ([]*entities.User, error) {
 
 	var users []*entities.User
 	for _, userData := range response.Data.QueryUser {
+		// Extract just the IDs from the subscribed games
+		var subscribedGameIDs []string
+		for _, game := range userData.SubscribedGames {
+			subscribedGameIDs = append(subscribedGameIDs, game.ID)
+		}
+
 		user := &entities.User{
 			DiscordID:          userData.DiscordID,
 			EighteenxxAccounts: userData.EighteenxxAccounts,
-			SubscribedGames:    userData.SubscribedGames,
+			SubscribedGames:    subscribedGameIDs,
 		}
 		users = append(users, user)
 	}
@@ -213,7 +249,9 @@ func (r *GraphQLUserRepository) GetUsersByGame(gameID string) ([]*entities.User,
 			queryUser(filter: { subscribedGames: { anyofterms: $gameID } }) {
 				discId
 				eighteenxxUser
-				subscribedGames
+				subscribedGames {
+					id
+				}
 			}
 		}
 	`
@@ -232,7 +270,9 @@ func (r *GraphQLUserRepository) GetUsersByGame(gameID string) ([]*entities.User,
 			QueryUser []struct {
 				DiscordID          string   `json:"discId"`
 				EighteenxxAccounts []string `json:"eighteenxxUser"`
-				SubscribedGames    []string `json:"subscribedGames"`
+				SubscribedGames    []struct {
+					ID string `json:"id"`
+				} `json:"subscribedGames"`
 			} `json:"queryUser"`
 		} `json:"data"`
 	}
@@ -243,10 +283,16 @@ func (r *GraphQLUserRepository) GetUsersByGame(gameID string) ([]*entities.User,
 
 	var users []*entities.User
 	for _, userData := range response.Data.QueryUser {
+		// Extract just the IDs from the subscribed games
+		var subscribedGameIDs []string
+		for _, game := range userData.SubscribedGames {
+			subscribedGameIDs = append(subscribedGameIDs, game.ID)
+		}
+
 		user := &entities.User{
 			DiscordID:          userData.DiscordID,
 			EighteenxxAccounts: userData.EighteenxxAccounts,
-			SubscribedGames:    userData.SubscribedGames,
+			SubscribedGames:    subscribedGameIDs,
 		}
 		users = append(users, user)
 	}

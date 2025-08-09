@@ -18,11 +18,24 @@ type EighteenxxAPIAdapter struct {
 
 // EighteenxxGameData represents the structure of game data from 18xx.games API
 type EighteenxxGameData struct {
-	ID           string   `json:"id"`
-	Players      []string `json:"players"`
-	ActivePlayer string   `json:"active_player"`
-	Finished     bool     `json:"finished"`
-	LastUpdated  string   `json:"last_updated"`
+	ID          int                      `json:"id"`
+	Description string                   `json:"description"`
+	User        map[string]interface{}   `json:"user"`
+	Players     []map[string]interface{} `json:"players"`
+	MinPlayers  int                      `json:"min_players"`
+	MaxPlayers  int                      `json:"max_players"`
+	Title       string                   `json:"title"`
+	Settings    map[string]interface{}   `json:"settings"`
+	Status      string                   `json:"status"`
+	Turn        int                      `json:"turn"`
+	Round       string                   `json:"round"`
+	Acting      []int                    `json:"acting"`
+	Result      map[string]interface{}   `json:"result"`
+	Actions     []interface{}            `json:"actions"`
+	Loaded      bool                     `json:"loaded"`
+	CreatedAt   int64                    `json:"created_at"`
+	UpdatedAt   int64                    `json:"updated_at"`
+	FinishedAt  *int64                   `json:"finished_at"`
 }
 
 // NewEighteenxxAPIAdapter creates a new 18xx API adapter
@@ -61,12 +74,37 @@ func (a *EighteenxxAPIAdapter) FetchGameData(gameID string) (*entities.Game, err
 	}
 
 	// Convert API data to domain entity
+	// Extract player names from the players array
+	var playerNames []string
+	for _, player := range apiData.Players {
+		if name, ok := player["name"].(string); ok {
+			playerNames = append(playerNames, name)
+		}
+	}
+
+	// Determine if game is finished based on status and finished_at
+	isFinished := apiData.Status == "finished" || apiData.FinishedAt != nil
+
+	// Get all active players from acting array
+	var activePlayers []string
+	for _, actingID := range apiData.Acting {
+		// Find the player with the acting ID
+		for _, player := range apiData.Players {
+			if playerID, ok := player["id"].(float64); ok && int(playerID) == actingID {
+				if name, ok := player["name"].(string); ok {
+					activePlayers = append(activePlayers, name)
+					break
+				}
+			}
+		}
+	}
+
 	game := &entities.Game{
-		ID:           apiData.ID,
-		Players:      apiData.Players,
-		ActivePlayer: apiData.ActivePlayer,
-		Finished:     apiData.Finished,
-		LastUpdated:  time.Now(), // We'll use current time since API doesn't provide it
+		ID:            fmt.Sprintf("%d", apiData.ID),
+		Players:       playerNames,
+		ActivePlayers: activePlayers,
+		Finished:      isFinished,
+		LastUpdated:   time.Unix(apiData.UpdatedAt, 0),
 	}
 
 	return game, nil

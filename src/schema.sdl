@@ -22,6 +22,7 @@ type User {
     discId: String! @id @search(by: [exact])
     eighteenxxUser: [String!]
     games: [GameChannelMap]
+    subscribedGames: [GameData!]
 }
 
 """
@@ -53,10 +54,14 @@ enum NotificationType {
 Notifications
 """
 type Notification {
+    id: String! @id @search(by: [exact])
     type: NotificationType!
-    address: String!
-    game: GameData!
-    users: [User!]!
+    message: String!
+    gameId: String!
+    channelId: String!
+    guildId: String!
+    users: [String!]
     sent: Boolean!
     attempts: Int!
+    createdAt: String!
 }

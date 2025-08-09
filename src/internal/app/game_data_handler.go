@@ -111,9 +111,9 @@ func (h *GameDataHandler) handleGameChange(change *entities.GameChange) {
 }
 
 // AddGameToTracking adds a game to the tracking list
-func (h *GameDataHandler) AddGameToTracking(gameID string) error {
+func (h *GameDataHandler) AddGameToTracking(gameID string, channelID string, guildID string) error {
 	log.Printf("Adding game %s to tracking", gameID)
-	return h.gameService.TrackGame(gameID)
+	return h.gameService.TrackGame(gameID, channelID, guildID)
 }
 
 // RemoveGameFromTracking removes a game from the tracking list

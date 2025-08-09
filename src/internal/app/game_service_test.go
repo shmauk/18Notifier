@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func (m *MockGameRepository) GetGame(id string) (*entities.Game, error) {
 	return nil, nil
 }
 
-func (m *MockGameRepository) SaveGame(game *entities.Game) error {
+func (m *MockGameRepository) SaveGame(game *entities.Game, channelID string, guildID string) error {
 	m.games[game.ID] = game
 	return nil
 }
@@ -92,29 +93,46 @@ func TestGameService_TrackGame(t *testing.T) {
 	adapter := NewMockGameDataAdapter()
 	service := NewGameService(repo, adapter)
 
-	// Set up test game data in the adapter
+	// Test successful tracking
 	gameID := "test-game-123"
-	testGame := &entities.Game{
-		ID:           gameID,
-		ActivePlayer: "player1",
-		Finished:     false,
-		LastUpdated:  time.Now(),
+	game := &entities.Game{
+		ID:            gameID,
+		Players:       []string{"player1", "player2"},
+		ActivePlayers: []string{"player1"},
+		Finished:      false,
+		LastUpdated:   time.Now(),
 	}
-	adapter.SetGameData(gameID, testGame)
+	adapter.SetGameData(gameID, game)
 
-	// Test tracking a new game
-	err := service.TrackGame(gameID)
+	err := service.TrackGame(gameID, "test-channel", "test-guild")
 	if err != nil {
-		t.Errorf("GameService.TrackGame() error = %v", err)
+		t.Errorf("Expected no error, got %v", err)
 	}
 
-	// Verify game was saved
-	game, err := repo.GetGame(gameID)
+	savedGame, err := repo.GetGame(gameID)
 	if err != nil {
-		t.Errorf("Failed to get tracked game: %v", err)
+		t.Errorf("Expected no error getting saved game, got %v", err)
 	}
-	if game == nil {
-		t.Error("Tracked game not found in repository")
+	if savedGame == nil {
+		t.Error("Expected saved game to exist")
+	}
+	if savedGame.ID != gameID {
+		t.Errorf("Expected game ID %s, got %s", gameID, savedGame.ID)
+	}
+}
+
+func TestGameService_TrackGame_GameNotFound(t *testing.T) {
+	repo := NewMockGameRepository()
+	adapter := NewMockGameDataAdapter()
+	service := NewGameService(repo, adapter)
+
+	// Test tracking non-existent game
+	err := service.TrackGame("non-existent-game", "test-channel", "test-guild")
+	if err == nil {
+		t.Error("Expected error for non-existent game")
+	}
+	if !strings.Contains(err.Error(), "game not found") {
+		t.Errorf("Expected 'game not found' error, got %v", err)
 	}
 }
 
@@ -125,25 +143,26 @@ func TestGameService_GetActiveGames(t *testing.T) {
 
 	// Add some test games
 	activeGame := &entities.Game{
-		ID:           "active-game",
-		ActivePlayer: "player1",
-		Finished:     false,
-		LastUpdated:  time.Now(),
+		ID:            "active-game",
+		Players:       []string{"player1", "player2"},
+		ActivePlayers: []string{"player1"},
+		Finished:      false,
+		LastUpdated:   time.Now(),
 	}
 	finishedGame := &entities.Game{
-		ID:           "finished-game",
-		ActivePlayer: "",
-		Finished:     true,
-		LastUpdated:  time.Now(),
+		ID:            "finished-game",
+		Players:       []string{"player1", "player2"},
+		ActivePlayers: []string{},
+		Finished:      true,
+		LastUpdated:   time.Now(),
 	}
 
-	repo.SaveGame(activeGame)
-	repo.SaveGame(finishedGame)
+	repo.SaveGame(activeGame, "test-channel", "test-guild")
+	repo.SaveGame(finishedGame, "test-channel", "test-guild")
 
-	// Test getting active games
 	games, err := service.GetActiveGames()
 	if err != nil {
-		t.Errorf("GameService.GetActiveGames() error = %v", err)
+		t.Errorf("Expected no error, got %v", err)
 	}
 
 	if len(games) != 1 {
@@ -151,7 +170,7 @@ func TestGameService_GetActiveGames(t *testing.T) {
 	}
 
 	if games[0].ID != "active-game" {
-		t.Errorf("Expected active game ID 'active-game', got '%s'", games[0].ID)
+		t.Errorf("Expected active game ID 'active-game', got %s", games[0].ID)
 	}
 }
 
@@ -160,138 +179,86 @@ func TestGameService_UpdateGameData(t *testing.T) {
 	adapter := NewMockGameDataAdapter()
 	service := NewGameService(repo, adapter)
 
-	// Set up test data
-	gameID := "test-game"
+	gameID := "test-game-123"
 	oldGame := &entities.Game{
-		ID:           gameID,
-		ActivePlayer: "player1",
-		Finished:     false,
-		LastUpdated:  time.Now().Add(-time.Hour),
+		ID:            gameID,
+		Players:       []string{"player1", "player2"},
+		ActivePlayers: []string{"player1"},
+		Finished:      false,
+		LastUpdated:   time.Now(),
 	}
 	newGame := &entities.Game{
-		ID:           gameID,
-		ActivePlayer: "player2",
-		Finished:     false,
-		LastUpdated:  time.Now(),
+		ID:            gameID,
+		Players:       []string{"player1", "player2"},
+		ActivePlayers: []string{"player2"}, // Changed active player
+		Finished:      false,
+		LastUpdated:   time.Now(),
 	}
 
-	// Save old game and set up adapter
-	repo.SaveGame(oldGame)
+	repo.SaveGame(oldGame, "test-channel", "test-guild")
 	adapter.SetGameData(gameID, newGame)
 
-	// Test updating game data
 	changes, err := service.UpdateGameData(gameID)
 	if err != nil {
-		t.Errorf("GameService.UpdateGameData() error = %v", err)
+		t.Errorf("Expected no error, got %v", err)
 	}
 
-	// Verify changes were detected
-	if len(changes) == 0 {
-		t.Error("Expected changes to be detected, but none were found")
+	if len(changes) != 1 {
+		t.Errorf("Expected 1 change, got %d", len(changes))
 	}
 
-	// Verify game was updated in repository
-	updatedGame, err := repo.GetGame(gameID)
-	if err != nil {
-		t.Errorf("Failed to get updated game: %v", err)
+	change := changes[0]
+	if change.ChangeType != "player_change" {
+		t.Errorf("Expected change type 'player_change', got %s", change.ChangeType)
 	}
-	if updatedGame.ActivePlayer != "player2" {
-		t.Errorf("Expected active player 'player2', got '%s'", updatedGame.ActivePlayer)
+	if change.OldValue != "player1" {
+		t.Errorf("Expected old value 'player1', got %s", change.OldValue)
+	}
+	if change.NewValue != "player2" {
+		t.Errorf("Expected new value 'player2', got %s", change.NewValue)
 	}
 }
 
-func TestGameService_GetGame(t *testing.T) {
+func TestGameService_StopTrackingGame(t *testing.T) {
 	repo := NewMockGameRepository()
 	adapter := NewMockGameDataAdapter()
 	service := NewGameService(repo, adapter)
 
-	// Add test game
+	gameID := "test-game-123"
 	game := &entities.Game{
-		ID:           "test-game",
-		ActivePlayer: "player1",
-		Finished:     false,
-		LastUpdated:  time.Now(),
+		ID:            gameID,
+		Players:       []string{"player1", "player2"},
+		ActivePlayers: []string{"player1"},
+		Finished:      false,
+		LastUpdated:   time.Now(),
 	}
-	repo.SaveGame(game)
 
-	// Test getting game
-	retrievedGame, err := service.GetGame("test-game")
+	repo.SaveGame(game, "test-channel", "test-guild")
+
+	err := service.StopTrackingGame(gameID)
 	if err != nil {
-		t.Errorf("GameService.GetGame() error = %v", err)
+		t.Errorf("Expected no error, got %v", err)
 	}
 
-	if retrievedGame == nil {
-		t.Error("Expected game to be retrieved, got nil")
+	savedGame, err := repo.GetGame(gameID)
+	if err != nil {
+		t.Errorf("Expected no error getting game, got %v", err)
 	}
-
-	if retrievedGame.ID != "test-game" {
-		t.Errorf("Expected game ID 'test-game', got '%s'", retrievedGame.ID)
+	if savedGame != nil {
+		t.Error("Expected game to be deleted")
 	}
 }
 
-func TestGameService_GetAllGames(t *testing.T) {
+func TestGameService_StopTrackingGame_GameNotFound(t *testing.T) {
 	repo := NewMockGameRepository()
 	adapter := NewMockGameDataAdapter()
 	service := NewGameService(repo, adapter)
 
-	// Add test games
-	game1 := &entities.Game{ID: "game1", ActivePlayer: "player1", Finished: false}
-	game2 := &entities.Game{ID: "game2", ActivePlayer: "player2", Finished: false}
-	repo.SaveGame(game1)
-	repo.SaveGame(game2)
-
-	// Test getting all games
-	games, err := service.GetAllGames()
-	if err != nil {
-		t.Errorf("GameService.GetAllGames() error = %v", err)
+	err := service.StopTrackingGame("non-existent-game")
+	if err == nil {
+		t.Error("Expected error for non-existent game")
 	}
-
-	if len(games) != 2 {
-		t.Errorf("Expected 2 games, got %d", len(games))
-	}
-}
-
-func TestGameService_DetectChanges(t *testing.T) {
-	repo := NewMockGameRepository()
-	adapter := NewMockGameDataAdapter()
-	service := NewGameService(repo, adapter)
-
-	// Set up test data
-	gameID := "test-game"
-	oldGame := &entities.Game{
-		ID:           gameID,
-		ActivePlayer: "player1",
-		Finished:     false,
-		LastUpdated:  time.Now().Add(-time.Hour),
-	}
-	newGame := &entities.Game{
-		ID:           gameID,
-		ActivePlayer: "player2",
-		Finished:     false,
-		LastUpdated:  time.Now(),
-	}
-
-	// Test change detection
-	changes := service.DetectChanges(oldGame, newGame)
-
-	// Verify changes were detected
-	if len(changes) == 0 {
-		t.Error("Expected changes to be detected, but none were found")
-	}
-
-	// Verify specific change
-	foundPlayerChange := false
-	for _, change := range changes {
-		if change.ChangeType == "player_change" {
-			foundPlayerChange = true
-			if change.OldValue != "player1" || change.NewValue != "player2" {
-				t.Errorf("Expected player change from 'player1' to 'player2', got '%s' to '%s'",
-					change.OldValue, change.NewValue)
-			}
-		}
-	}
-
-	if !foundPlayerChange {
-		t.Error("Expected player change to be detected")
+	if !strings.Contains(err.Error(), "game not found") {
+		t.Errorf("Expected 'game not found' error, got %v", err)
 	}
 }

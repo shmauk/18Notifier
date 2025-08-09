@@ -1,7 +1,9 @@
 package app
 
 import (
+	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/18xxnotifier/internal/adapters"
@@ -205,49 +207,127 @@ func (app *Application) handleCommand(cmd adapters.DiscordCommand) {
 
 	// Then handle other commands
 	switch cmd.Command {
+	case "help":
+		helpMessage := "**18xxNotifier Commands:**\n\n" +
+			"**User Registration:**\n" +
+			"• `!18xx register` - Register your Discord account\n" +
+			"• `!18xx link <username>` - Link your 18xx.games username\n" +
+			"• `!18xx unlink <username>` - Unlink an 18xx account\n\n" +
+			"**Game Subscriptions:**\n" +
+			"• `!18xx subscribe <game_id>` - Subscribe to game notifications\n" +
+			"• `!18xx unsubscribe <game_id>` - Unsubscribe from game notifications\n" +
+			"• `!18xx subscriptions` - List your subscriptions\n\n" +
+			"**Game Tracking (Admin Only):**\n" +
+			"• `!18xx track <game_id>` - Start tracking a game in this channel\n" +
+			"• `!18xx untrack <game_id>` - Stop tracking a game\n" +
+			"• `!18xx tracked` - List tracked games\n\n" +
+			"**Utility:**\n" +
+			"• `!18xx help` - Show this help message\n" +
+			"• `!18xx test` - Send a test notification\n" +
+			"• `!18xx status` - Show bot status"
+
+		// Send help message to the channel
+		if err := app.discordAdapter.SendNotification(cmd.ChannelID, helpMessage, nil); err != nil {
+			log.Printf("Error sending help message: %v", err)
+		}
+
+	case "test":
+		testMessage := "✅ **18xxNotifier is working!** This is a test notification."
+		if err := app.discordAdapter.SendNotification(cmd.ChannelID, testMessage, nil); err != nil {
+			log.Printf("Error sending test message: %v", err)
+		}
+
 	case "track":
 		if len(cmd.Args) > 0 {
 			gameID := cmd.Args[0]
-			if err := app.gameService.TrackGame(gameID); err != nil {
+			if err := app.gameService.TrackGame(gameID, cmd.ChannelID, cmd.GuildID); err != nil {
 				log.Printf("Error tracking game %s: %v", gameID, err)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Failed to track game: "+err.Error(), nil)
 			} else {
 				log.Printf("Successfully started tracking game %s", gameID)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "✅ Successfully started tracking game: **"+gameID+"**", nil)
 			}
 		} else {
 			log.Printf("Track command requires game ID")
+			_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Please provide a game ID. Usage: `!18xx track <game_id>`", nil)
+		}
+	case "untrack":
+		if len(cmd.Args) > 0 {
+			gameID := cmd.Args[0]
+			if err := app.gameService.StopTrackingGame(gameID); err != nil {
+				log.Printf("Error untracking game %s: %v", gameID, err)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Failed to untrack game: "+err.Error(), nil)
+			} else {
+				log.Printf("Successfully stopped tracking game %s", gameID)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "✅ Successfully stopped tracking game: **"+gameID+"**", nil)
+			}
+		} else {
+			log.Printf("Untrack command requires game ID")
+			_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Please provide a game ID. Usage: `!18xx untrack <game_id>`", nil)
 		}
 	case "link":
 		if len(cmd.Args) > 0 {
 			account := cmd.Args[0]
 			if err := app.userDataHandler.LinkUserToAccount(cmd.UserID, account); err != nil {
 				log.Printf("Error linking account: %v", err)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Failed to link account: "+err.Error(), nil)
 			} else {
 				log.Printf("Successfully linked user %s to account %s", cmd.UserID, account)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "✅ Successfully linked your Discord account to 18xx.games account: **"+account+"**", nil)
 			}
 		} else {
 			log.Printf("Link command requires 18xx account name")
+			_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Please provide your 18xx.games username. Usage: `!18xx link <username>`", nil)
 		}
 	case "subscribe":
 		if len(cmd.Args) > 0 {
 			gameID := cmd.Args[0]
+
+			// First, ensure the game exists in the database by fetching it from the API
+			game, err := app.gameDataAdapter.FetchGameData(gameID)
+			if err != nil {
+				log.Printf("Error fetching game data for subscription: %v", err)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Failed to subscribe: Game not found or API error: "+err.Error(), nil)
+				break
+			}
+
+			// Check if game already exists in database, if not save it
+			existingGame, err := app.gameRepo.GetGame(gameID)
+			if err != nil || existingGame == nil {
+				log.Printf("Game %s not in database, creating it for subscription", gameID)
+				// Save the game with the current channel as the tracking channel
+				if err := app.gameRepo.SaveGame(game, cmd.ChannelID, cmd.GuildID); err != nil {
+					log.Printf("Error saving game for subscription: %v", err)
+					_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Failed to subscribe: Could not save game to database: "+err.Error(), nil)
+					break
+				}
+			}
+
+			// Now subscribe the user to the game
 			if err := app.userDataHandler.SubscribeUserToGame(cmd.UserID, gameID); err != nil {
 				log.Printf("Error subscribing to game: %v", err)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Failed to subscribe to game: "+err.Error(), nil)
 			} else {
 				log.Printf("Successfully subscribed user %s to game %s", cmd.UserID, gameID)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "✅ Successfully subscribed to game: **"+gameID+"**", nil)
 			}
 		} else {
 			log.Printf("Subscribe command requires game ID")
+			_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Please provide a game ID. Usage: `!18xx subscribe <game_id>`", nil)
 		}
 	case "unsubscribe":
 		if len(cmd.Args) > 0 {
 			gameID := cmd.Args[0]
 			if err := app.userDataHandler.UnsubscribeUserFromGame(cmd.UserID, gameID); err != nil {
 				log.Printf("Error unsubscribing from game: %v", err)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Failed to unsubscribe from game: "+err.Error(), nil)
 			} else {
 				log.Printf("Successfully unsubscribed user %s from game %s", cmd.UserID, gameID)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "✅ Successfully unsubscribed from game: **"+gameID+"**", nil)
 			}
 		} else {
 			log.Printf("Unsubscribe command requires game ID")
+			_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Please provide a game ID. Usage: `!18xx unsubscribe <game_id>`", nil)
 		}
 	case "games":
 		games, err := app.gameService.GetActiveGames()
@@ -256,7 +336,48 @@ func (app *Application) handleCommand(cmd adapters.DiscordCommand) {
 		} else {
 			log.Printf("Active games: %d", len(games))
 			for _, game := range games {
-				log.Printf("  - %s (active: %s, finished: %v)", game.ID, game.ActivePlayer, game.Finished)
+				log.Printf("  - %s (active: %v, finished: %v)", game.ID, game.ActivePlayers, game.Finished)
+			}
+		}
+	case "register":
+		err := app.userDataHandler.RegisterUser(cmd.UserID)
+		if err != nil {
+			if strings.Contains(err.Error(), "user already exists") {
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "ℹ️ You are already registered.", nil)
+			} else {
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Registration failed: "+err.Error(), nil)
+			}
+		} else {
+			_ = app.discordAdapter.SendNotification(cmd.ChannelID, "✅ You are now registered!", nil)
+		}
+	case "unlink":
+		if len(cmd.Args) > 0 {
+			account := cmd.Args[0]
+			if err := app.userDataHandler.UnlinkUserFromAccount(cmd.UserID, account); err != nil {
+				log.Printf("Error unlinking account: %v", err)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Failed to unlink account: "+err.Error(), nil)
+			} else {
+				log.Printf("Successfully unlinked user %s from account %s", cmd.UserID, account)
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "✅ Successfully unlinked your Discord account from 18xx.games account: **"+account+"**", nil)
+			}
+		} else {
+			log.Printf("Unlink command requires 18xx account name")
+			_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Please provide your 18xx.games username. Usage: `!18xx unlink <username>`", nil)
+		}
+	case "subscriptions":
+		subscriptions, err := app.userDataHandler.GetUserSubscriptions(cmd.UserID)
+		if err != nil {
+			log.Printf("Error getting user subscriptions: %v", err)
+			_ = app.discordAdapter.SendNotification(cmd.ChannelID, "❌ Failed to get subscriptions: "+err.Error(), nil)
+		} else {
+			if len(subscriptions) == 0 {
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, "📋 You are not subscribed to any games.", nil)
+			} else {
+				message := "📋 **Your Game Subscriptions:**\n\n"
+				for _, gameID := range subscriptions {
+					message += fmt.Sprintf("• Game **%s**\n", gameID)
+				}
+				_ = app.discordAdapter.SendNotification(cmd.ChannelID, message, nil)
 			}
 		}
 	default:

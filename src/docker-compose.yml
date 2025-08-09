@@ -43,8 +43,8 @@ services:
       - schema-init
     environment:
       - DGRAPH_ENDPOINT=http://dgraph:8080
-      - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - DISCORD_APP_ID=${DISCORD_APP_ID}
+      - DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN_HERE
+      - DISCORD_APP_ID=809584220489646180
     ports:
       - "3000:3000"
     restart: unless-stopped

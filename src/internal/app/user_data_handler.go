@@ -29,9 +29,10 @@ func (h *UserDataHandler) RegisterUser(discordID string) error {
 	existingUser, err := h.userRepo.GetUser(discordID)
 	if err == nil && existingUser != nil {
 		log.Printf("User %s already registered", discordID)
-		return nil // User already exists
+		return fmt.Errorf("user already exists: %s", discordID)
 	}
 
+	// If user doesn't exist (err != nil or existingUser == nil), proceed with registration
 	return h.userService.RegisterUser(discordID)
 }
 

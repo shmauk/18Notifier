@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/18xxnotifier/internal/domain/entities"
 )
@@ -23,10 +24,10 @@ func (s *UserService) RegisterUser(discordID string) error {
 	// Check if user already exists
 	existingUser, err := s.userRepo.GetUser(discordID)
 	if err != nil {
-		return fmt.Errorf("failed to check existing user: %w", err)
-	}
-
-	if existingUser != nil {
+		// If the error indicates user not found, that's expected for new registration
+		// We'll proceed with creating the user
+		log.Printf("User %s not found, proceeding with registration", discordID)
+	} else if existingUser != nil {
 		return fmt.Errorf("user already exists: %s", discordID)
 	}
 

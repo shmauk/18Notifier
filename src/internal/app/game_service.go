@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/18xxnotifier/internal/adapters"
@@ -23,7 +24,7 @@ func NewGameService(gameRepo entities.GameRepository, gameDataAdapter adapters.G
 }
 
 // TrackGame starts tracking a new game
-func (s *GameService) TrackGame(gameID string) error {
+func (s *GameService) TrackGame(gameID string, channelID string, guildID string) error {
 	// Fetch initial game data from external API
 	game, err := s.gameDataAdapter.FetchGameData(gameID)
 	if err != nil {
@@ -34,8 +35,8 @@ func (s *GameService) TrackGame(gameID string) error {
 		return fmt.Errorf("game not found: %s", gameID)
 	}
 
-	// Save game to repository
-	err = s.gameRepo.SaveGame(game)
+	// Save game to repository with channel information
+	err = s.gameRepo.SaveGame(game, channelID, guildID)
 	if err != nil {
 		return fmt.Errorf("failed to save game: %w", err)
 	}
@@ -97,12 +98,14 @@ func (s *GameService) DetectChanges(oldGame, newGame *entities.Game) []*entities
 	var changes []*entities.GameChange
 
 	// Detect active player changes
-	if oldGame.ActivePlayer != newGame.ActivePlayer {
+	oldActivePlayers := strings.Join(oldGame.ActivePlayers, ", ")
+	newActivePlayers := strings.Join(newGame.ActivePlayers, ", ")
+	if oldActivePlayers != newActivePlayers {
 		changes = append(changes, &entities.GameChange{
 			GameID:     newGame.ID,
 			ChangeType: "player_change",
-			OldValue:   oldGame.ActivePlayer,
-			NewValue:   newGame.ActivePlayer,
+			OldValue:   oldActivePlayers,
+			NewValue:   newActivePlayers,
 			Timestamp:  time.Now(),
 		})
 	}
@@ -119,7 +122,7 @@ func (s *GameService) DetectChanges(oldGame, newGame *entities.Game) []*entities
 	}
 
 	// Detect turn start (when game becomes active)
-	if oldGame.Finished && !newGame.Finished && newGame.ActivePlayer != "" {
+	if oldGame.Finished && !newGame.Finished && len(newGame.ActivePlayers) > 0 {
 		changes = append(changes, &entities.GameChange{
 			GameID:     newGame.ID,
 			ChangeType: "turn_start",
